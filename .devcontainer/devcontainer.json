@@ -1,0 +1,12 @@
+{
+  "name": "AutoServe (PHP 8 + MySQL 8)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/AutoServe",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "AutoServe", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh"
+}
