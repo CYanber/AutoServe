@@ -71,6 +71,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $q->execute([(int)$_POST['vehicle_id'],$u['id']]);
             flash('Vehicle deleted.'); go('vehicles');
         }
+        if ($action === 'add_mechanic') {
+            if (role() !== 'MANAGER') throw new Exception('Only the manager can add mechanics.');
+            $name = trim($_POST['full_name'] ?? '');
+            $email = strtolower(trim($_POST['email'] ?? ''));
+            $phone = trim($_POST['phone'] ?? '');
+            $password = $_POST['password'] ?? '';
+            if ($name === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) {
+                throw new Exception('Enter a name, valid email, and password with at least 8 characters.');
+            }
+            $q = $pdo->prepare("SELECT 1 FROM `Owner` WHERE email=?");
+            $q->execute([$email]);
+            if ($q->fetch()) throw new Exception('That email is already used by an owner account.');
+            $q = $pdo->prepare("INSERT INTO `Mechanic` (full_name,email,password_hash,role,phone) VALUES (?,?,?,'MECHANIC',?)");
+            $q->execute([$name,$email,password_hash($password,PASSWORD_DEFAULT),$phone]);
+            flash('Mechanic added.'); go('mechanics');
+        }
         if ($action === 'save_slot') {
             if (role() !== 'MANAGER') throw new Exception('Only the manager can manage service slots.');
             $id=(int)($_POST['slot_id'] ?? 0); $mechanic=(int)$_POST['mechanic_id'];
@@ -146,7 +162,7 @@ body{background:#f4f6fa;color:#1f2937}.navbar{background:#18345b}.navbar-brand,.
 <a href="index.php?page=dashboard">Dashboard</a>
 <?php if(role()==='OWNER'): ?><a href="index.php?page=vehicles">My Vehicles</a><a href="index.php?page=browse">Browse Service Slots</a><a href="index.php?page=book">Book Service</a><a href="index.php?page=bookings">My Bookings</a><?php endif; ?>
 <?php if(role()==='MECHANIC'): ?><a href="index.php?page=jobs">My Job List</a><?php endif; ?>
-<?php if(role()==='MANAGER'): ?><a href="index.php?page=slots">Manage Slots</a><a href="index.php?page=jobs">All Bookings / Jobs</a><?php endif; ?>
+<?php if(role()==='MANAGER'): ?><a href="index.php?page=slots">Manage Slots</a><a href="index.php?page=mechanics">Manage Mechanics</a><a href="index.php?page=jobs">All Bookings / Jobs</a><?php endif; ?>
 </div></aside><?php endif; ?>
 <main class="<?= $u?'col-lg-10':'col-lg-6 mx-auto' ?>">
 <?php if($error): ?><div class="alert alert-danger"><?=h($error)?></div><?php endif; ?>
@@ -198,6 +214,18 @@ foreach([['Vehicles',$v],['Bookings',$b],['Active Bookings',$up]] as $stat): ?>
 <div class="col-md-1"><label class="form-label">Capacity</label><input class="form-control" type="number" name="capacity" min="1" max="3" value="<?=h($edit['capacity']??1)?>" required></div><div class="col-12"><button class="btn btn-primary">Save Slot</button></div></form></div>
 <div class="card p-3"><div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Time</th><th>Mechanic</th><th>Capacity</th><th>Status</th><th>Actions</th></tr></thead><tbody>
 <?php foreach(rows($pdo,"SELECT s.*,m.full_name mechanic FROM `ServiceSlot` s JOIN `Mechanic` m ON m.mechanic_id=s.mechanic_id ORDER BY slot_date,start_time") as $s): ?><tr><td><?=h($s['slot_date'])?></td><td><?=h(substr($s['start_time'],0,5).' - '.substr($s['end_time'],0,5))?></td><td><?=h($s['mechanic'])?></td><td><?=h($s['capacity'])?></td><td><?=h($s['status'])?></td><td><a class="btn btn-sm btn-outline-primary" href="index.php?page=slots&edit=<?=$s['slot_id']?>">Edit</a> <form class="d-inline" method="post"><input type="hidden" name="action" value="close_slot"><input type="hidden" name="slot_id" value="<?=$s['slot_id']?>"><button class="btn btn-sm btn-outline-danger">Close</button></form></td></tr><?php endforeach; ?></tbody></table></div></div>
+
+<?php elseif($page==='mechanics' && role()==='MANAGER'): ?>
+<h2 class="page-title">Manage Mechanics</h2>
+<div class="card p-4 mb-4"><h5>Add Mechanic</h5><form method="post" class="row g-3"><input type="hidden" name="action" value="add_mechanic">
+<div class="col-md-3"><label class="form-label">Full name</label><input class="form-control" name="full_name" required></div>
+<div class="col-md-3"><label class="form-label">Email</label><input class="form-control" type="email" name="email" required></div>
+<div class="col-md-2"><label class="form-label">Phone</label><input class="form-control" name="phone"></div>
+<div class="col-md-3"><label class="form-label">Password (min 8 characters)</label><input class="form-control" type="password" name="password" minlength="8" required></div>
+<div class="col-12"><button class="btn btn-primary">Add Mechanic</button></div></form></div>
+<div class="card p-3"><div class="table-responsive"><table class="table"><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th></tr></thead><tbody>
+<?php foreach(rows($pdo,"SELECT mechanic_id,full_name,email,phone FROM `Mechanic` WHERE role='MECHANIC' ORDER BY full_name") as $m): ?><tr><td><?=$m['mechanic_id']?></td><td><?=h($m['full_name'])?></td><td><?=h($m['email'])?></td><td><?=h($m['phone'])?></td></tr><?php endforeach; ?>
+</tbody></table></div></div>
 
 <?php elseif($page==='browse' && role()==='OWNER'): ?>
 <h2 class="page-title">Browse Service Slots</h2><form class="card p-3 mb-3 row g-2" method="get"><input type="hidden" name="page" value="browse"><div class="col-md-4"><label class="form-label">Filter date</label><input class="form-control" type="date" name="date" value="<?=h($_GET['date']??'')?>"></div><div class="col-md-4"><label class="form-label">Mechanic</label><select class="form-select" name="mechanic"><option value="">All mechanics</option><?php foreach(rows($pdo,"SELECT mechanic_id,full_name FROM `Mechanic` WHERE role='MECHANIC'") as $m): ?><option value="<?=$m['mechanic_id']?>" <?=($_GET['mechanic']??'')==$m['mechanic_id']?'selected':''?>><?=h($m['full_name'])?></option><?php endforeach; ?></select></div><div class="col-md-2 align-self-end"><button class="btn btn-primary">Search</button></div></form>
