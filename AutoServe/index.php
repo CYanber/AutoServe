@@ -101,6 +101,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             flash('Service slot saved.'); go('slots');
         }
+        if ($action === 'open_slot') {
+            if (role() !== 'MANAGER') throw new Exception('Not allowed.');
+            $q=$pdo->prepare("UPDATE `ServiceSlot` SET status='OPEN' WHERE slot_id=? AND slot_date>=CURDATE()");
+            $q->execute([(int)$_POST['slot_id']]);
+            flash($q->rowCount() ? 'Slot reopened.' : 'Slot could not be reopened (past date or already open).'); go('slots');
+        }
         if ($action === 'close_slot') {
             if (role() !== 'MANAGER') throw new Exception('Not allowed.');
             $q=$pdo->prepare("UPDATE `ServiceSlot` SET status='CLOSED' WHERE slot_id=?");
@@ -213,7 +219,7 @@ foreach([['Vehicles',$v],['Bookings',$b],['Active Bookings',$up]] as $stat): ?>
 <div class="col-md-2"><label class="form-label">End</label><input class="form-control" type="time" name="end_time" value="<?=h($edit['end_time']??'')?>" required></div>
 <div class="col-md-1"><label class="form-label">Capacity</label><input class="form-control" type="number" name="capacity" min="1" max="3" value="<?=h($edit['capacity']??1)?>" required></div><div class="col-12"><button class="btn btn-primary">Save Slot</button></div></form></div>
 <div class="card p-3"><div class="table-responsive"><table class="table"><thead><tr><th>Date</th><th>Time</th><th>Mechanic</th><th>Capacity</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-<?php foreach(rows($pdo,"SELECT s.*,m.full_name mechanic FROM `ServiceSlot` s JOIN `Mechanic` m ON m.mechanic_id=s.mechanic_id ORDER BY slot_date,start_time") as $s): ?><tr><td><?=h($s['slot_date'])?></td><td><?=h(substr($s['start_time'],0,5).' - '.substr($s['end_time'],0,5))?></td><td><?=h($s['mechanic'])?></td><td><?=h($s['capacity'])?></td><td><?=h($s['status'])?></td><td><a class="btn btn-sm btn-outline-primary" href="index.php?page=slots&edit=<?=$s['slot_id']?>">Edit</a> <form class="d-inline" method="post"><input type="hidden" name="action" value="close_slot"><input type="hidden" name="slot_id" value="<?=$s['slot_id']?>"><button class="btn btn-sm btn-outline-danger">Close</button></form></td></tr><?php endforeach; ?></tbody></table></div></div>
+<?php foreach(rows($pdo,"SELECT s.*,m.full_name mechanic FROM `ServiceSlot` s JOIN `Mechanic` m ON m.mechanic_id=s.mechanic_id ORDER BY slot_date,start_time") as $s): ?><tr><td><?=h($s['slot_date'])?></td><td><?=h(substr($s['start_time'],0,5).' - '.substr($s['end_time'],0,5))?></td><td><?=h($s['mechanic'])?></td><td><?=h($s['capacity'])?></td><td><?=h($s['status'])?></td><td><a class="btn btn-sm btn-outline-primary" href="index.php?page=slots&edit=<?=$s['slot_id']?>">Edit</a> <?php if($s['status']==='CLOSED'): ?><form class="d-inline" method="post"><input type="hidden" name="action" value="open_slot"><input type="hidden" name="slot_id" value="<?=$s['slot_id']?>"><button class="btn btn-sm btn-outline-success">Reopen</button></form><?php else: ?><form class="d-inline" method="post"><input type="hidden" name="action" value="close_slot"><input type="hidden" name="slot_id" value="<?=$s['slot_id']?>"><button class="btn btn-sm btn-outline-danger">Close</button></form><?php endif; ?></td></tr><?php endforeach; ?></tbody></table></div></div>
 
 <?php elseif($page==='mechanics' && role()==='MANAGER'): ?>
 <h2 class="page-title">Manage Mechanics</h2>
